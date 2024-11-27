@@ -1,0 +1,129 @@
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'maven-publish'
+    id("com.github.johnrengelman.shadow") version "7.1.2"  // Updated for Java 11 compatibility
+}
+
+group = "org.example"
+version = "1.0-SNAPSHOT"
+
+repositories {
+    mavenCentral()
+}
+
+def checkerFrameworkVersion = "3.32.0"
+
+dependencies {
+    // Checker Framework
+    implementation("org.checkerframework:checker:${checkerFrameworkVersion}")
+    implementation("org.checkerframework:checker-qual:${checkerFrameworkVersion}")
+    implementation "org.checkerframework:javacutil:${checkerFrameworkVersion}"  // Add this line
+    annotationProcessor("org.checkerframework:checker:${checkerFrameworkVersion}")
+
+    // Annotation Processing
+    implementation("com.google.auto.service:auto-service:1.0.1")
+    annotationProcessor("com.google.auto.service:auto-service:1.0.1")
+    annotationProcessor "org.checkerframework:checker-qual:${checkerFrameworkVersion}"
+
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.checkerframework:framework-test:${checkerFrameworkVersion}")
+
+    // Additional dependencies for Java 11
+    implementation("javax.annotation:javax.annotation-api:1.3.2")
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+    withSourcesJar()
+    withJavadocJar()
+}
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.fork = true
+    options.forkOptions.jvmArgs += [
+            "--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED"
+    ]
+    options.compilerArgs.addAll([
+            '-processor', 'org.checkerframework.checker.nullness.NullnessChecker',
+            //'-processor', 'org.example.sqlchecker.checker.SQLInjectionChecker',
+            '-Xlint:unchecked',
+            '-Xlint:deprecation'
+    ])
+
+    options.annotationProcessorPath = configurations.annotationProcessor
+}
+configurations {
+    processor
+    implementation.extendsFrom processor
+}
+tasks.register('compileProcessor', JavaCompile) {
+    source = sourceSets.main.java
+    classpath = configurations.compileClasspath
+    destinationDirectory = file("$buildDir/classes/java/processor")
+    options.compilerArgs = [
+            '-proc:none' // Disable annotation processing for this compilation
+    ]
+}
+tasks.compileJava {
+    dependsOn compileProcessor
+    options.annotationProcessorPath = files(
+            configurations.annotationProcessor,
+            tasks.compileProcessor.destinationDirectory
+    )
+}
+
+tasks.withType(Test) {
+    useJUnit()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        showStandardStreams = true
+    }
+    include '**/cases/**'
+}
+tasks.named('jar') {
+    manifest {
+        attributes(
+                'Implementation-Title': project.name,
+                'Implementation-Version': project.version,
+                'Built-By': System.getProperty('user.name'),
+                'Build-Jdk': System.getProperty('java.version'),
+                'Created-By': "Gradle ${gradle.gradleVersion}"
+        )
+    }
+}
+tasks.named('shadowJar') {
+    archiveClassifier.set('all')
+    mergeServiceFiles()
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            pom {
+                name = 'SQL Injection Checker'
+                description = 'A pluggable type system for preventing SQL injection vulnerabilities'
+                licenses {
+                    license {
+                        name = 'MIT'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+            }
+        }
+    }
+}
+// Optional: Enable explicit API mode for better type safety
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add("-parameters")
+}
