@@ -36,7 +36,7 @@ public class TruePositiveCases {
         String expectedQuery = "SELECT * FROM users WHERE name = 'safeUser'";
 
         // Assert that the malicious query does not match the expected safe query
-        Assert.assertEquals("The query should not match the expected safe query", expectedQuery, maliciousQuery);
+        Assert.assertEquals("The query shouldn't match the expected safe query", expectedQuery, maliciousQuery);
     }
 
     @Test
